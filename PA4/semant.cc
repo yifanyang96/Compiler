@@ -610,7 +610,7 @@ Expression dispatch_class::type_checking(SymbolTable<Symbol, Entry> *attr_declar
         return set_type(Object);
     Feature method_entity = curr_classtable->get_method_entity(expr_type, name);
     Expression expr_with_type;
-    Expressions new_actual;
+    Expressions new_actual = nil_Expressions();
     int i;
     for (i = actual->first(); actual->more(i); i = actual->next(i)) {
         if (!method_entity->get_formals()->more(i)) {
@@ -790,7 +790,7 @@ Expression lt_class::type_checking(SymbolTable<Symbol, Entry> *attr_declarations
         curr_classtable->semant_error(curr_class->get_filename(), this) << "Right part of < is not of type Int.\n";
         return set_type(Object);
     }
-    return set_type(Int);
+    return set_type(Bool);
 }
 
 Expression eq_class::type_checking(SymbolTable<Symbol, Entry> *attr_declarations, SymbolTable<Symbol, Feature_class> *method_declarations, ClassTable *curr_classtable, Class_ curr_class) {
@@ -838,7 +838,7 @@ Expression leq_class::type_checking(SymbolTable<Symbol, Entry> *attr_declaration
         curr_classtable->semant_error(curr_class->get_filename(), this) << "Right part of <= is not of type Int.\n";
         return set_type(Object);
     }
-    return set_type(Int);
+    return set_type(Bool);
 }
 
 Expression comp_class::type_checking(SymbolTable<Symbol, Entry> *attr_declarations, SymbolTable<Symbol, Feature_class> *method_declarations, ClassTable *curr_classtable, Class_ curr_class) {

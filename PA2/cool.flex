@@ -5,7 +5,7 @@
 /*
  *  Stuff enclosed in %{ %} in the first section is copied verbatim to the
  *  output, so headers and global definitions are placed here to be visible
- * to the code in the file.  Don't remove anything that was here initially
+ * to the code in the file.  Don''t remove anything that was here initially
  */
 %{
 #include <cool-parse.h>
@@ -102,6 +102,9 @@ INVALID					[^a-zA-Z0-9_ \f\r\t\v\n+/\-*=<.~,;:()@{}]
 <COMMENT>\n							{ curr_lineno++; }
 <COMMENT>"*"+")"        { BEGIN(INITIAL); }
 
+ /*
+  * Inline comments
+  */
 "--"	{ BEGIN(INLINE_COMMENT); }
 <INLINE_COMMENT><<EOF>> {
 	BEGIN(INITIAL);

@@ -685,9 +685,10 @@ void CgenClassTable::code_init() {
 
 void CgenNode::code_init(ostream &s, CgenClassTableP curr_classtable, int &label_index) {
   s << name << CLASSINIT_SUFFIX << LABEL;
-  emit_addiu(SP, SP, -12, s);
-  emit_store(FP, 3, SP, s);
-  emit_store(SELF, 2, SP, s);
+  emit_addiu(SP, SP, -16, s);
+  emit_store(FP, 4, SP, s);
+  emit_store(SELF, 3, SP, s);
+  emit_store("$s1", 2, SP, s);
   emit_store(RA, 1, SP, s);
   emit_addiu(FP, SP, 4, s);
   emit_move(SELF, ACC, s);
@@ -705,10 +706,11 @@ void CgenNode::code_init(ostream &s, CgenClassTableP curr_classtable, int &label
     }
   }
   emit_move(ACC, SELF, s);
-  emit_load(FP, 3, SP, s);
-  emit_load(SELF, 2, SP, s);
+  emit_load(FP, 4, SP, s);
+  emit_load(SELF, 3, SP, s);
+  emit_load("$s1", 2, SP, s);
   emit_load(RA, 1, SP, s);
-  emit_addiu(SP, SP, 12, s);
+  emit_addiu(SP, SP, 16, s);
   emit_return(s);
 }
 
@@ -725,8 +727,10 @@ void CgenNode::code_objtab(ostream &s) {
 }
 
 void CgenClassTable::code_method() {
-  for (List<CgenNode> *l = nds; l; l = l->tl())
-    l->hd()->code_method(str, this, label_index);
+  for (List<CgenNode> *l = nds; l; l = l->tl()) {
+    if (!l->hd()->basic())
+      l->hd()->code_method(str, this, label_index);
+  }
 }
 
 void CgenNode::code_method(ostream &s, CgenClassTableP curr_classtable, int &label_index) {
@@ -737,20 +741,21 @@ void CgenNode::code_method(ostream &s, CgenClassTableP curr_classtable, int &lab
 
 void method_class::code_method(ostream& s, CgenNodeP curr_node, CgenClassTableP curr_classtable, int& label_index) {
   s << curr_node->get_name() << "." << name << LABEL;
-  emit_addiu(SP, SP, -12, s);
-  emit_store(FP, 3, SP, s);
-  emit_store(SELF, 2, SP, s);
+  emit_addiu(SP, SP, -16, s);
+  emit_store(FP, 4, SP, s);
+  emit_store(SELF, 3, SP, s);
+  emit_store("$s1", 2, SP, s);
   emit_store(RA, 1, SP, s);
   emit_addiu(FP, SP, 4, s);
   emit_move(SELF, ACC, s);
   for (int i = formals->first(); formals->more(i); i = formals->next(i))
     curr_node->add_formal_id(formals->nth(i)->get_name());
   expr->code(s, curr_node, curr_classtable, label_index);
-  emit_move(ACC, SELF, s);
-  emit_load(FP, 3, SP, s);
-  emit_load(SELF, 2, SP, s);
+  emit_load(FP, 4, SP, s);
+  emit_load(SELF, 3, SP, s);
+  emit_load("$s1", 2, SP, s);
   emit_load(RA, 1, SP, s);
-  emit_addiu(SP, SP, 12, s);
+  emit_addiu(SP, SP, 16, s);
   emit_return(s);
 }
 
@@ -1198,11 +1203,10 @@ int CgenNode::find_max_child() {
   }
 }
 
-void CgenClassTable::code_typcase(Symbol node) {
+void CgenClassTable::code_typcase(Symbol node, int label) {
   CgenNodeP curr_node = lookup(node);
-  emit_label_def(++label_index, str);
-  emit_blti(T1, curr_node->get_class_tag(), label_index+1, str);
-  emit_bgti(T1, curr_node->find_max_child(), label_index+1, str);
+  emit_blti(T1, curr_node->get_class_tag(), label, str);
+  emit_bgti(T1, curr_node->find_max_child(), label, str);
 }
 
 //******************************************************************
@@ -1217,7 +1221,22 @@ void CgenClassTable::code_typcase(Symbol node) {
 
 void assign_class::code(ostream &s, CgenNodeP curr_node, CgenClassTableP curr_classtable, int &label_index) {
   expr->code(s, curr_node, curr_classtable, label_index);
-  emit_store(ACC, curr_node->get_attr_offset(name), SELF, s);
+  int offset = curr_node->get_let_offset(name);
+  if (offset != -1)
+    emit_store(ACC, -offset, FP, s);
+  else {
+    offset = curr_node->get_formal_offset(name);
+    if (offset != -1)
+      emit_store(ACC, offset+3, FP, s);
+    else {
+      offset = curr_node->get_attr_offset(name);
+      emit_store(ACC, offset, SELF, s);
+    }
+  }
+  if (cgen_Memmgr) {
+    emit_addiu(A1, SELF, curr_node->get_attr_offset(name), s);
+    emit_gc_assign(s);
+  }
 }
 
 void static_dispatch_class::code(ostream &s, CgenNodeP curr_node, CgenClassTableP curr_classtable, int &label_index) {
@@ -1226,6 +1245,10 @@ void static_dispatch_class::code(ostream &s, CgenNodeP curr_node, CgenClassTable
     emit_push(ACC, s);
   }
   expr->code(s, curr_node, curr_classtable, label_index);
+  emit_bne(ACC, ZERO, ++label_index, s);
+  emit_load_imm(T1, get_line_number(), s);
+  s << JAL << "_dispatch_abort" << endl;
+  emit_label_def(label_index, s);
   s << JAL << type_name << "." << name << endl;
 }
 
@@ -1235,6 +1258,10 @@ void dispatch_class::code(ostream &s, CgenNodeP curr_node, CgenClassTableP curr_
     emit_push(ACC, s);
   }
   expr->code(s, curr_node, curr_classtable, label_index);
+  emit_bne(ACC, ZERO, ++label_index, s);
+  emit_load_imm(T1, get_line_number(), s);
+  s << JAL << "_dispatch_abort" << endl;
+  emit_label_def(label_index, s);
   emit_load(T1, 2, ACC, s);
   int offset = curr_classtable->get_method_offset(expr->get_type(), name);
   emit_load(T1, offset, T1, s);
@@ -1244,9 +1271,7 @@ void dispatch_class::code(ostream &s, CgenNodeP curr_node, CgenClassTableP curr_
 void cond_class::code(ostream &s, CgenNodeP curr_node, CgenClassTableP curr_classtable, int &label_index) {
   pred->code(s, curr_node, curr_classtable, label_index);
   emit_load(T1, 3, ACC, s);
-  emit_load_bool(ACC, BoolConst(1), s);
-  emit_load(ACC, 3, ACC, s);
-  emit_beq(ACC, T1, ++label_index, s);
+  emit_bne(ACC, ZERO, ++label_index, s);
   int temp_label = label_index;
   else_exp->code(s, curr_node, curr_classtable, ++label_index);
   emit_branch(temp_label+1, s);
@@ -1261,9 +1286,7 @@ void loop_class::code(ostream &s, CgenNodeP curr_node, CgenClassTableP curr_clas
   emit_label_def(temp_label, s);
   pred->code(s, curr_node, curr_classtable, label_index);
   emit_load(T1, 3, ACC, s);
-  emit_load_bool(ACC, BoolConst(1), s);
-  emit_load(ACC, 3, ACC, s);
-  emit_beq(ACC, T1, temp_label, s);
+  emit_bne(ACC, ZERO, temp_label+1, s);
   emit_branch(temp_label+2, s);
   emit_label_def(temp_label+1, s);
   body->code(s, curr_node, curr_classtable, label_index);
@@ -1274,21 +1297,32 @@ void loop_class::code(ostream &s, CgenNodeP curr_node, CgenClassTableP curr_clas
 
 void typcase_class::code(ostream &s, CgenNodeP curr_node, CgenClassTableP curr_classtable, int &label_index) {
   expr->code(s, curr_node, curr_classtable, label_index);
+  emit_load(T1, 0, ACC, s);
+  emit_bne(ACC, ZERO, label_index+1, s);
+  emit_partial_load_address(ACC, s); s << STRCONST_PREFIX << "0" << endl;
+  emit_load_imm(T1, get_line_number(), s);
+  s << JAL << "_case_abort2" << endl;
   List<Case_class> *branch_list = NULL;
   for (int i = cases->first(); cases->more(i); i = cases->next(i))
     branch_list = new List<Case_class>(cases->nth(i), branch_list);
   branch_list = curr_classtable->sort(branch_list);
   Case curr_branch;
-  int curr_label = ++label_index;
+  int curr_label = label_index+1;
+  int final_label = label_index + list_length(branch_list) + 2;
+  label_index = final_label;
   for (List<Case_class> *l = branch_list; l; l = l->tl()) {
+    emit_label_def(curr_label, s);
     curr_branch = l->hd();
-    curr_classtable->code_typcase(curr_branch->get_type());
+    curr_classtable->code_typcase(curr_branch->get_type(), ++curr_label);
     curr_node->add_let_id(curr_branch->get_name());
     emit_push(ACC, s);
     curr_branch->get_expr()->code(s, curr_node, curr_classtable, label_index);
-    emit_branch(curr_label, s);
+    emit_branch(final_label, s);
   }
+  emit_label_def(curr_label++, s);
+  s << JAL << "_case_abort" << endl;
   emit_label_def(curr_label, s);
+  emit_addiu(SP, SP, 4, s);
 }
 
 void block_class::code(ostream &s, CgenNodeP curr_node, CgenClassTableP curr_classtable, int &label_index) {
@@ -1310,10 +1344,10 @@ void plus_class::code(ostream &s, CgenNodeP curr_node, CgenClassTableP curr_clas
   emit_fetch_int(T1, ACC, s);
   e2->code(s, curr_node, curr_classtable, label_index);
   emit_fetch_int(ACC, ACC, s);
-  emit_add(T1, T1, ACC, s);
+  emit_add("$s1", T1, ACC, s);
   emit_partial_load_address(ACC, s); emit_protobj_ref(Int, s); s << endl;
   emit_jal("Object.copy", s);
-  emit_store_int(T1, ACC, s);
+  emit_store_int("$s1", ACC, s);
 }
 
 void sub_class::code(ostream &s, CgenNodeP curr_node, CgenClassTableP curr_classtable, int &label_index) {
@@ -1321,10 +1355,10 @@ void sub_class::code(ostream &s, CgenNodeP curr_node, CgenClassTableP curr_class
   emit_fetch_int(T1, ACC, s);
   e2->code(s, curr_node, curr_classtable, label_index);
   emit_fetch_int(ACC, ACC, s);
-  emit_sub(T1, T1, ACC, s);
+  emit_sub("$s1", T1, ACC, s);
   emit_partial_load_address(ACC, s); emit_protobj_ref(Int, s); s << endl;
   emit_jal("Object.copy", s);
-  emit_store_int(T1, ACC, s);
+  emit_store_int("$s1", ACC, s);
 }
 
 void mul_class::code(ostream &s, CgenNodeP curr_node, CgenClassTableP curr_classtable, int &label_index) {
@@ -1332,10 +1366,10 @@ void mul_class::code(ostream &s, CgenNodeP curr_node, CgenClassTableP curr_class
   emit_fetch_int(T1, ACC, s);
   e2->code(s, curr_node, curr_classtable, label_index);
   emit_fetch_int(ACC, ACC, s);
-  emit_mul(T1, T1, ACC, s);
+  emit_mul("$s1", T1, ACC, s);
   emit_partial_load_address(ACC, s); emit_protobj_ref(Int, s); s << endl;
   emit_jal("Object.copy", s);
-  emit_store_int(T1, ACC, s);
+  emit_store_int("$s1", ACC, s);
 }
 
 void divide_class::code(ostream &s, CgenNodeP curr_node, CgenClassTableP curr_classtable, int &label_index) {
@@ -1343,19 +1377,19 @@ void divide_class::code(ostream &s, CgenNodeP curr_node, CgenClassTableP curr_cl
   emit_fetch_int(T1, ACC, s);
   e2->code(s, curr_node, curr_classtable, label_index);
   emit_fetch_int(ACC, ACC, s);
-  emit_div(T1, T1, ACC, s);
+  emit_div("$s1", T1, ACC, s);
   emit_partial_load_address(ACC, s); emit_protobj_ref(Int, s); s << endl;
   emit_jal("Object.copy", s);
-  emit_store_int(T1, ACC, s);
+  emit_store_int("$s1", ACC, s);
 }
 
 void neg_class::code(ostream &s, CgenNodeP curr_node, CgenClassTableP curr_classtable, int &label_index) {
   e1->code(s, curr_node, curr_classtable, label_index);
   emit_fetch_int(T1, ACC, s);
-  emit_neg(T1, T1, s);
+  emit_neg("$s1", T1, s);
   emit_partial_load_address(ACC, s); emit_protobj_ref(Int, s); s << endl;
   emit_jal("Object.copy", s);
-  emit_store_int(T1, ACC, s);
+  emit_store_int("$s1", ACC, s);
 }
 
 void lt_class::code(ostream &s, CgenNodeP curr_node, CgenClassTableP curr_classtable, int &label_index) {
@@ -1429,14 +1463,14 @@ void new__class::code(ostream &s, CgenNodeP curr_node, CgenClassTableP curr_clas
     emit_load(T2, 0, SELF, s);
     emit_sll(T2, T2, 3, s);
     emit_addu(T1, T1, T2, s);
-    emit_move(T3, T1, s);
+    emit_move("$s1", T1, s);
     emit_load(ACC, 0, T3, s);
     emit_jal("Object.copy", s);
-    emit_load(T1, 1, T3, s);
+    emit_load(T1, 1, "$s1", s);
     emit_jalr(T1, s);
   }
   else{
-    emit_partial_load_address(T1, s); s << type_name << PROTOBJ_SUFFIX << endl;
+    emit_partial_load_address(ACC, s); s << type_name << PROTOBJ_SUFFIX << endl;
     emit_jal("Object.copy", s);
     s << JAL << type_name << CLASSINIT_SUFFIX << endl;
   }

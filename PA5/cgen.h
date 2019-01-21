@@ -65,7 +65,7 @@ public:
    int get_method_offset(Symbol class_name, Symbol method_name);
    List<Case_class> *sort(List<Case_class> *node_list);
    List<Case_class> *remove_entry(List<Case_class> *node_list, Case node);
-   void code_typcase(Symbol node);
+   void code_typcase(Symbol node, int label);
 };
 
 
