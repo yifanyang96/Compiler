@@ -54,9 +54,9 @@ During naming-scoping the following errors need to be detected:
 
 Type-Checking can be easily implemented with reference to the type rules specified in *The Cool Reference Manual*. With the help of the attr / method declaration tables, we can easily lookup feature information (notice the difference between `probe()` and `lookup()`) and add formals, let and case bindings. However there are two problems worth mentioning.
 
-### $lub$ Property
+### `lub` Property
 
-In the case expression, the lub of multiple types needs to be computed. Here is one proposal on $lub$'s property:
+In the case expression, the lub of multiple types needs to be computed. Here is one proposal on `lub`'s property:
 
 ![lub equation](Screenshots/lub_equation.png)
 
@@ -64,7 +64,7 @@ Therefore, we can update the lub in the loop.
 
 ### SELF_TYPE
 
-`SELF_TYPE` is the trickiest part of the project. Though the formal rules with the notation of $\rm SELF\_TYPE_C$ are complicated, the implementation can be written in a concise way. Since we are performing type-checking in the unit of classes, whenever `SELF_TYPE` appears (in attributes, return types or method bodies, current or inherited) the $\rm SELF\_TYPE_C$ is actually the current class. So we can just lookup `self` in the current attribute declaration table.
+`SELF_TYPE` is the trickiest part of the project. Though the formal rules with the notation of ` SELF_TYPE_C` are complicated, the implementation can be written in a concise way. Since we are performing type-checking in the unit of classes, whenever `SELF_TYPE` appears (in attributes, return types or method bodies, current or inherited) the ` SELF_TYPE_C` is actually the current class. So we can just lookup `self` in the current attribute declaration table.
 
 Errors in this phase are:
 
