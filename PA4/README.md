@@ -58,9 +58,9 @@ Type-Checking can be easily implemented with reference to the type rules specifi
 
 In the case expression, the lub of multiple types needs to be computed. Here is one proposal on $lub$'s property:
 
-![](http://latex.codecogs.com/gif.latex?$$lub(x_1, x_2, \dots, x_n)=lub(x_1, lub(x_2, \dots, x_n))$$)
+![](http://latex.codecogs.com/gif.latex?$$lub(x_1, x_2, \\dots, x_n)=lub(x_1, lub(x_2, \\dots, x_n))$$)
 
-![](http://latex.codecogs.com/gif.latex?$${\rm Proof: let}\,lub(x_1, x_2, \dots, x_n)=L,\,lub(x_1, lub(x_2, \dots, x_n))=R \\ \because lub(x_2, \dots, x_n)\leq R \\ \therefore x_2,\dots,x_n\leq R \\ \because x_1\leq R \\ \therefore R\in ancestor(x_1,\dots,x_n) \\ \therefore L\leq R \\ \because ancestor(x_1,\dots,x_n)\subseteq ancestor(x_2,\dots,x_n) \\ \therefore lub(x_2, \dots, x_n)\leq L \\ \because x_1\leq L \\ \therefore L\in ancestor(x_1,lub(x_2, \dots, x_n)) \\ \therefore R\leq L \\ \therefore L=R$$)
+![](http://latex.codecogs.com/gif.latex?$${\\rm Proof: let}\\,lub(x_1, x_2, \\dots, x_n)=L,\\,lub(x_1, lub(x_2, \\dots, x_n))=R \\\\ \\because lub(x_2, \\dots, x_n)\\leq R \\\ \\therefore x_2,\\dots,x_n\\leq R \\\\ \\because x_1\\leq R \\\\ \\therefore R\\in ancestor(x_1,\\dots,x_n) \\\\ \\therefore L\\leq R \\\\ \\because ancestor(x_1,\\dots,x_n)\\subseteq ancestor(x_2,\\dots,x_n) \\\\ \\therefore lub(x_2, \\dots, x_n)\\leq L \\\\ \\because x_1\\leq L \\\\ \\therefore L\\in ancestor(x_1,lub(x_2, \\dots, x_n)) \\\\ \\therefore R\\leq L \\\\ \\therefore L=R$$)
 
 Therefore, we can update the lub in the loop.
 
