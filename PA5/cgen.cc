@@ -576,7 +576,11 @@ void CgenClassTable::code_select_gc()
   str << "_MemMgr_TEST:" << endl;
   str << WORD << (cgen_Memmgr_Test == GC_TEST) << endl;
 }
-
+///////////////////////////////////////////////////////////////////////
+//
+// CgenTable code methods
+//
+///////////////////////////////////////////////////////////////////////
 
 //********************************************************
 //
@@ -603,6 +607,14 @@ void CgenClassTable::code_constants()
   inttable.code_string_table(str,intclasstag);
   code_bools(boolclasstag);
 }
+//
+// Set the classtags and code the class_nameTab
+//
+void CgenClassTable::code_class_nametab() {
+  str << CLASSNAMETAB << LABEL;
+  CgenNodeP curr_node = root();
+  curr_node->build_class_tag(str, 0);
+}
 
 int CgenNode::build_class_tag(ostream& s, int index) {
   int temp_index = index;
@@ -612,15 +624,14 @@ int CgenNode::build_class_tag(ostream& s, int index) {
     temp_index = l->hd()->build_class_tag(s, temp_index);
   return temp_index;
 }
-
-void CgenClassTable::code_class_nametab() {
-  str << CLASSNAMETAB << LABEL;
-  CgenNodeP curr_node = root();
-  curr_node->build_class_tag(str, 0);
-}
-
-void CgenNode::code_method_name(ostream& s, Symbol method_name) {
-  s << method_symbtab->lookup(method_name) << "." << method_name;
+//
+// Code the dispatch tables
+//
+void CgenClassTable::build_methodtab() {
+  for (List<CgenNode> *l = nds; l; l = l->tl()) {
+    emit_disptable_ref(l->hd()->get_name(), str); str << LABEL;
+    l->hd()->code_method_tab(str);
+  }
 }
 
 void CgenNode::code_method_tab(ostream& s) {
@@ -630,13 +641,12 @@ void CgenNode::code_method_tab(ostream& s) {
   }
 }
 
-void CgenClassTable::build_methodtab() {
-  for (List<CgenNode> *l = nds; l; l = l->tl()) {
-    emit_disptable_ref(l->hd()->get_name(), str); str << LABEL;
-    l->hd()->code_method_tab(str);
-  }
+void CgenNode::code_method_name(ostream& s, Symbol method_name) {
+  s << method_symbtab->lookup(method_name) << "." << method_name;
 }
-
+//
+// Code the proto-objects
+//
 void CgenClassTable::code_protoobj() {
   for (List<CgenNode> *l = nds; l; l = l->tl()) {
     if (l->hd()->get_name() == Str)
@@ -654,17 +664,8 @@ void CgenNode::code_class_protobj(ostream &s) {
       << WORD << (DEFAULT_OBJFIELDS + attr_num) << endl //object size
       << WORD; emit_disptable_ref(name, s); s << endl; // dispatch table
   Symbol curr_type;
-  for (List<Entry> *l = attr_list; l; l = l->tl()) {
-    curr_type = attr_symbtab->lookup(l->hd())->get_type();
-    if (curr_type == Int)
-    { s << WORD; inttable.lookup_string("0")->code_ref(s); s << endl; }
-    else if (curr_type == Str)
-    { s << WORD; stringtable.lookup_string("")->code_ref(s); s << endl; }
-    else if (curr_type == Bool)
-    { s << WORD; BoolConst(0).code_ref(s); s << endl; }
-    else
-      s << WORD << 0 << endl;
-  }
+  for (List<Entry> *l = attr_list; l; l = l->tl()) 
+    s << WORD << 0 << endl;
 }
 
 void CgenClassTable::code_string_protobj() {
@@ -677,7 +678,9 @@ void CgenClassTable::code_string_protobj() {
   emit_string_constant(str,"");                                 // ascii string
   str << ALIGN;                                                 // align to word
 }
-
+//
+// Code initialization methods
+//
 void CgenClassTable::code_init() {
   for (List<CgenNode> *l = nds; l; l = l->tl())
     l->hd()->code_init(str, this, label_index);
@@ -685,6 +688,7 @@ void CgenClassTable::code_init() {
 
 void CgenNode::code_init(ostream &s, CgenClassTableP curr_classtable, int &label_index) {
   s << name << CLASSINIT_SUFFIX << LABEL;
+  // Save all the callee-saved registers
   emit_addiu(SP, SP, -16, s);
   emit_store(FP, 4, SP, s);
   emit_store(SELF, 3, SP, s);
@@ -693,16 +697,14 @@ void CgenNode::code_init(ostream &s, CgenClassTableP curr_classtable, int &label
   emit_addiu(FP, SP, 4, s);
   emit_move(SELF, ACC, s);
   if (name != Object) {
+    // Call parent's init method
     s << JAL << parent << CLASSINIT_SUFFIX << endl;
-    int curr_attr_num = 1;
-    int parent_attr_num = parentnd->get_attr_num();
-    for (List<Entry> *l = attr_list; l; l = l->tl()) {
-      if (curr_attr_num > parent_attr_num) {
-        Feature curr_feature = attr_symbtab->lookup(l->hd());
+    int curr_attr_num = parentnd->get_attr_num()+3;
+    for (int i = features->first(); features->more(i); i = features->next(i)) {
+      Feature curr_feature = features->nth(i);
+      if (curr_feature->attr_flag())
         curr_feature->code(s, this, curr_classtable, label_index);
-        emit_store(ACC, curr_attr_num+2, SELF, s);
-      }
-      curr_attr_num++;
+      emit_store(ACC, curr_attr_num++, SELF, s);
     }
   }
   emit_move(ACC, SELF, s);
@@ -713,7 +715,9 @@ void CgenNode::code_init(ostream &s, CgenClassTableP curr_classtable, int &label
   emit_addiu(SP, SP, 16, s);
   emit_return(s);
 }
-
+//
+// Code the class_objTab
+//
 void CgenClassTable::code_objtab() {
   str << CLASSOBJTAB << LABEL;
   root()->code_objtab(str);
@@ -722,10 +726,13 @@ void CgenClassTable::code_objtab() {
 void CgenNode::code_objtab(ostream &s) {
   s << WORD << name << PROTOBJ_SUFFIX << endl;
   s << WORD << name << CLASSINIT_SUFFIX << endl;
+  // In the order of class tag
   for (List<CgenNode> *l = children; l; l = l->tl())
     l->hd()->code_objtab(s);
 }
-
+//
+// Code the methods
+//
 void CgenClassTable::code_method() {
   for (List<CgenNode> *l = nds; l; l = l->tl()) {
     if (!l->hd()->basic())
@@ -741,6 +748,7 @@ void CgenNode::code_method(ostream &s, CgenClassTableP curr_classtable, int &lab
 
 void method_class::code_method(ostream& s, CgenNodeP curr_node, CgenClassTableP curr_classtable, int& label_index) {
   s << curr_node->get_name() << "." << name << LABEL;
+  // Save all the callee-saved registers
   emit_addiu(SP, SP, -16, s);
   emit_store(FP, 4, SP, s);
   emit_store(SELF, 3, SP, s);
@@ -757,21 +765,14 @@ void method_class::code_method(ostream& s, CgenNodeP curr_node, CgenClassTableP 
   emit_load(RA, 1, SP, s);
   emit_addiu(SP, SP, 16, s);
   emit_return(s);
+  curr_node->empty_formal_id();
 }
 
-int CgenNode::get_method_offset(Symbol method_name) {
-  int curr_index = 0;
-  for (List<Entry> *l = method_list; l; l = l->tl()) {
-    if (l->hd() == method_name)
-      return curr_index;
-    curr_index++;
-  }
-  return curr_index;
-}
-
-int CgenClassTable::get_method_offset(Symbol class_name, Symbol method_name) {
-  return lookup(class_name)->get_method_offset(method_name);  
-}
+///////////////////////////////////////////////////////////////////////
+//
+// Build the Inheritance Graph
+//
+///////////////////////////////////////////////////////////////////////
 
 CgenClassTable::CgenClassTable(Classes classes, ostream& s) : nds(NULL) , str(s), class_num(0), label_index(0)
 {
@@ -917,12 +918,6 @@ void CgenClassTable::install_basic_classes()
 //
 // install_classes enters a list of classes in the symbol table.
 //
-List<CgenNode> *CgenClassTable::list_enqueue(List<CgenNode> *l, CgenNodeP nd) {
-  if (l == NULL)
-    return new List<CgenNode>(nd, l);
-  else
-    return new List<CgenNode>(l->hd(), list_enqueue(l->tl(), nd));
-}
 
 void CgenClassTable::install_class(CgenNodeP nd)
 {
@@ -935,7 +930,7 @@ void CgenClassTable::install_class(CgenNodeP nd)
 
   // The class name is legal, so add it to the list of classes
   // and the symbol table.
-  nds = list_enqueue(nds, nd);
+  nds = list_enqueue(nds, nd); // Changed to enqueue
   addid(name,nd);
   class_num++;
 }
@@ -968,16 +963,9 @@ void CgenClassTable::set_relations(CgenNodeP nd)
   parent_node->add_child(nd);
 }
 
-List<CgenNode> *CgenNode::list_enqueue(List<CgenNode> *l, CgenNodeP nd) {
-  if (l == NULL)
-    return new List<CgenNode>(nd, l);
-  else
-    return new List<CgenNode>(l->hd(), list_enqueue(l->tl(), nd));
-}
-
 void CgenNode::add_child(CgenNodeP n)
 {
-  children = list_enqueue(children, n);
+  children = list_enqueue(children, n); // Changed to enqueue
 }
 
 void CgenNode::set_parentnd(CgenNodeP p)
@@ -986,8 +974,61 @@ void CgenNode::set_parentnd(CgenNodeP p)
   assert(p != NULL);
   parentnd = p;
 }
+//
+// Record all the features of a certain class
+//
+void CgenClassTable::build_feature_tab() {
+  for(List<CgenNode> *l = nds; l; l = l->tl())
+    l->hd()->build_feature_tab();
+}
 
+void CgenNode::build_feature_tab() {
+  attr_list = build_attr_tab_acc(attr_list, 1);
+  method_list = build_method_tab_acc(method_list, method_symbtab, 0);
+}
 
+List<Entry> *CgenNode::build_attr_tab_acc(List<Entry> *feature_list, int flag) {
+  if (name != Object) 
+    return add_attr(parentnd->build_attr_tab_acc(feature_list, flag), flag);
+  return add_attr(feature_list, flag);
+}
+
+List<Entry> *CgenNode::build_method_tab_acc(List<Entry> *feature_list, SymbolTable<Symbol, Entry> *feature_symbtab, int flag) {
+  if (name != Object) 
+    return add_method(parentnd->build_method_tab_acc(feature_list, feature_symbtab, flag), feature_symbtab, flag);
+  return add_method(feature_list, feature_symbtab, flag);
+}
+
+List<Entry> *CgenNode::add_attr(List<Entry> *feature_list, int flag) {
+  for (int i = features->first(); features->more(i); i = features->next(i)) {
+    Feature curr_feature = features->nth(i);
+    if (curr_feature->attr_flag() == flag)
+      feature_list = add_attr_acc(feature_list, curr_feature);
+  }
+  return feature_list;
+}
+
+List<Entry> *CgenNode::add_method(List<Entry> *feature_list, SymbolTable<Symbol, Entry> *feature_symbtab, int flag) {
+  for (int i = features->first(); features->more(i); i = features->next(i)) {
+    Feature curr_feature = features->nth(i);
+    if (curr_feature->attr_flag() == flag)
+      feature_list = add_method_acc(feature_list, feature_symbtab, curr_feature);
+  }
+  return feature_list;
+}
+
+List<Entry> *CgenNode::add_attr_acc(List<Entry> *feature_list, Feature curr_feature) {
+  Symbol curr_name = curr_feature->get_name();
+  feature_list = list_enqueue(feature_list, curr_name);
+  return feature_list;
+}
+
+List<Entry> *CgenNode::add_method_acc(List<Entry> *feature_list, SymbolTable<Symbol, Entry> *feature_symbtab, Feature curr_feature) {
+  Symbol curr_name = curr_feature->get_name();
+  feature_symbtab->addid(curr_name, name);
+  feature_list = list_enqueue(feature_list, curr_name);
+  return feature_list;
+}
 
 void CgenClassTable::code()
 {
@@ -1005,21 +1046,11 @@ void CgenClassTable::code()
   code_protoobj();
   build_methodtab();
   code_objtab();
-//                 Add your code to emit
-//                   - prototype objects
-//                   - class_nameTab
-//                   - dispatch tables
-//
-
+  
   if (cgen_debug) cout << "coding global text" << endl;
   code_global_text();
   code_init();
   code_method();
-//                 Add your code to emit
-//                   - object initializer
-//                   - the class methods
-//                   - etc...
-
 }
 
 
@@ -1028,152 +1059,21 @@ CgenNodeP CgenClassTable::root()
    return probe(Object);
 }
 
-
 ///////////////////////////////////////////////////////////////////////
 //
-// CgenNode methods
+// CgenTable helper methods
 //
 ///////////////////////////////////////////////////////////////////////
 
-CgenNode::CgenNode(Class_ nd, Basicness bstatus, CgenClassTableP ct) :
-   class__class((const class__class &) *nd),
-   parentnd(NULL),
-   children(NULL),
-   basic_status(bstatus),
-   attr_list(NULL),
-   method_list(NULL),
-   let_list(NULL),
-   formal_list(NULL)
-{ 
-   attr_symbtab = new SymbolTable<Symbol, Feature_class>();
-   attr_symbtab->enterscope();
-   method_symbtab = new SymbolTable<Symbol, Entry>();
-   method_symbtab->enterscope();
-   stringtable.add_string(name->get_string());          // Add class name to string table
-}
-
-List<Entry> *CgenNode::list_enqueue(List<Entry> *l, Symbol s) {
+List<CgenNode> *CgenClassTable::list_enqueue(List<CgenNode> *l, CgenNodeP nd) {
   if (l == NULL)
-    return new List<Entry>(s, l);
+    return new List<CgenNode>(nd, l);
   else
-    return new List<Entry>(l->hd(), list_enqueue(l->tl(), s));
+    return new List<CgenNode>(l->hd(), list_enqueue(l->tl(), nd));
 }
 
-List<Entry> *CgenNode::add_attr_acc(List<Entry> *feature_list, SymbolTable<Symbol, Feature_class> *feature_symbtab, Feature curr_feature) {
-  Symbol curr_name = curr_feature->get_name();
-  feature_symbtab->addid(curr_name, curr_feature);
-  feature_list = list_enqueue(feature_list, curr_name);
-  return feature_list;
-}
-
-List<Entry> *CgenNode::add_method_acc(List<Entry> *feature_list, SymbolTable<Symbol, Entry> *feature_symbtab, Feature curr_feature) {
-  Symbol curr_name = curr_feature->get_name();
-  feature_symbtab->addid(curr_name, name);
-  feature_list = list_enqueue(feature_list, curr_name);
-  return feature_list;
-}
-
-List<Entry> *CgenNode::add_attr(List<Entry> *feature_list, SymbolTable<Symbol, Feature_class> *feature_symbtab, int flag) {
-  for (int i = features->first(); features->more(i); i = features->next(i)) {
-    Feature curr_feature = features->nth(i);
-    if (curr_feature->attr_flag() == flag)
-      feature_list = add_attr_acc(feature_list, feature_symbtab, curr_feature);
-  }
-  return feature_list;
-}
-
-List<Entry> *CgenNode::add_method(List<Entry> *feature_list, SymbolTable<Symbol, Entry> *feature_symbtab, int flag) {
-  for (int i = features->first(); features->more(i); i = features->next(i)) {
-    Feature curr_feature = features->nth(i);
-    if (curr_feature->attr_flag() == flag)
-      feature_list = add_method_acc(feature_list, feature_symbtab, curr_feature);
-  }
-  return feature_list;
-}
-
-List<Entry> *CgenNode::build_attr_tab_acc(List<Entry> *feature_list, SymbolTable<Symbol, Feature_class> *feature_symbtab, int flag) {
-  if (name != Object) 
-    return add_attr(parentnd->build_attr_tab_acc(feature_list, feature_symbtab, flag), feature_symbtab, flag);
-  return add_attr(feature_list, feature_symbtab, flag);
-}
-
-List<Entry> *CgenNode::build_method_tab_acc(List<Entry> *feature_list, SymbolTable<Symbol, Entry> *feature_symbtab, int flag) {
-  if (name != Object) 
-    return add_method(parentnd->build_method_tab_acc(feature_list, feature_symbtab, flag), feature_symbtab, flag);
-  return add_method(feature_list, feature_symbtab, flag);
-}
-
-void CgenNode::build_feature_tab() {
-  attr_list = build_attr_tab_acc(attr_list, attr_symbtab, 1);
-  method_list = build_method_tab_acc(method_list, method_symbtab, 0);
-}
-
-void CgenClassTable::build_feature_tab() {
-  for(List<CgenNode> *l = nds; l; l = l->tl())
-    l->hd()->build_feature_tab();
-}
-
-int CgenNode::get_attr_offset(Symbol attr_name) {
-  int v = 3;
-  for (List<Entry> *l = attr_list; l; l = l->tl()) {
-    if (l->hd() == attr_name)
-      return v;
-    else
-      v++;
-  }
-  return v;
-}
-
-void CgenNode::add_let_id(Symbol name) {
-  let_list = new List<Entry>(name, let_list);
-}
-
-void CgenNode::remove_let_id() {
-  let_list = let_list->tl();
-}
-
-int CgenNode::get_let_offset(Symbol name) {
-  int v = list_length(let_list);
-  for (List<Entry> *l = let_list; l; l = l->tl()) {
-    if (l->hd() == name)
-      return v;
-    else
-      v--;
-  }
-  return -1;
-}
-
-void CgenNode::add_formal_id(Symbol name) {
-  formal_list = new List<Entry>(name, formal_list);
-}
-
-void CgenNode::remove_formal_id() {
-  formal_list = formal_list->tl();
-}
-
-int CgenNode::get_formal_offset(Symbol name) {
-  int v = 0;
-  for (List<Entry> *l = formal_list; l; l = l->tl()) {
-    if (l->hd() == name)
-      return v;
-    else
-      v++;
-  }
-  return -1;
-}
-
-int CgenClassTable::find_class_tag(Symbol name) {
-  for(List<CgenNode> *l = nds; l; l = l->tl()) {
-    if (l->hd()->get_name() == name)
-      return l->hd()->get_class_tag();
-  }
-  return 0;
-}
-
-List<Case_class> *CgenClassTable::remove_entry(List<Case_class> *node_list, Case node) {
-  if (node_list->hd() == node)
-    return node_list->tl();
-  return new List<Case_class>(node_list->hd(), remove_entry(node_list->tl(), node));
+int CgenClassTable::get_method_offset(Symbol class_name, Symbol method_name) {
+  return lookup(class_name)->get_method_offset(method_name);  
 }
 
 List<Case_class> *CgenClassTable::sort(List<Case_class> *node_list) {
@@ -1194,6 +1094,114 @@ List<Case_class> *CgenClassTable::sort(List<Case_class> *node_list) {
   return new List<Case_class>(max_node, sort(remove_entry(node_list, max_node)));
 }
 
+List<Case_class> *CgenClassTable::remove_entry(List<Case_class> *node_list, Case node) {
+  if (node_list->hd() == node)
+    return node_list->tl();
+  return new List<Case_class>(node_list->hd(), remove_entry(node_list->tl(), node));
+}
+
+void CgenClassTable::code_typcase(Symbol node, int label) {
+  CgenNodeP curr_node = lookup(node);
+  emit_blti(T1, curr_node->get_class_tag(), label, str);
+  emit_bgti(T1, curr_node->find_max_child(), label, str);
+}
+
+///////////////////////////////////////////////////////////////////////
+//
+// CgenNode helper methods
+//
+///////////////////////////////////////////////////////////////////////
+
+CgenNode::CgenNode(Class_ nd, Basicness bstatus, CgenClassTableP ct) :
+   class__class((const class__class &) *nd),
+   parentnd(NULL),
+   children(NULL),
+   basic_status(bstatus),
+   attr_list(NULL),
+   method_list(NULL),
+   let_list(NULL),
+   formal_list(NULL)
+{ 
+   method_symbtab = new SymbolTable<Symbol, Entry>();
+   method_symbtab->enterscope();
+   stringtable.add_string(name->get_string());          // Add class name to string table
+}
+
+List<CgenNode> *CgenNode::list_enqueue(List<CgenNode> *l, CgenNodeP nd) {
+  if (l == NULL)
+    return new List<CgenNode>(nd, l);
+  else
+    return new List<CgenNode>(l->hd(), list_enqueue(l->tl(), nd));
+}
+
+List<Entry> *CgenNode::list_enqueue(List<Entry> *l, Symbol s) {
+  if (l == NULL)
+    return new List<Entry>(s, l);
+  else
+    return new List<Entry>(l->hd(), list_enqueue(l->tl(), s));
+}
+
+int CgenNode::get_attr_offset(Symbol attr_name) {
+  int v = 3;
+  for (List<Entry> *l = attr_list; l; l = l->tl()) {
+    if (l->hd() == attr_name)
+      return v;
+    else
+      v++;
+  }
+  return v;
+}
+
+int CgenNode::get_method_offset(Symbol method_name) {
+  int curr_index = 0;
+  for (List<Entry> *l = method_list; l; l = l->tl()) {
+    if (l->hd() == method_name)
+      return curr_index;
+    curr_index++;
+  }
+  return curr_index;
+}
+
+int CgenNode::get_let_offset(Symbol name) {
+  int v = list_length(let_list);
+  for (List<Entry> *l = let_list; l; l = l->tl()) {
+    if (l->hd() == name)
+      return v;
+    else
+      v--;
+  }
+  return -1;
+}
+
+int CgenNode::get_formal_offset(Symbol name) {
+  int v = 0;
+  for (List<Entry> *l = formal_list; l; l = l->tl()) {
+    if (l->hd() == name)
+      return v;
+    else
+      v++;
+  }
+  return -1;
+}
+
+void CgenNode::add_let_id(Symbol name) {
+  let_list = new List<Entry>(name, let_list);
+}
+
+void CgenNode::remove_let_id() {
+  let_list = let_list->tl();
+}
+
+void CgenNode::add_formal_id(Symbol name) {
+  formal_list = new List<Entry>(name, formal_list);
+}
+
+void CgenNode::empty_formal_id() {
+  formal_list = NULL;
+}
+//
+// Find the largest class tag among its children. Used in coding cases.
+//
 int CgenNode::find_max_child() {
   if (children == NULL)
     return class_tag;
@@ -1203,11 +1211,7 @@ int CgenNode::find_max_child() {
   }
 }
 
-void CgenClassTable::code_typcase(Symbol node, int label) {
-  CgenNodeP curr_node = lookup(node);
-  emit_blti(T1, curr_node->get_class_tag(), label, str);
-  emit_bgti(T1, curr_node->find_max_child(), label, str);
-}
+
 
 //******************************************************************
 //
@@ -1340,47 +1344,59 @@ void let_class::code(ostream &s, CgenNodeP curr_node, CgenClassTableP curr_class
 }
 
 void plus_class::code(ostream &s, CgenNodeP curr_node, CgenClassTableP curr_classtable, int &label_index) {
+  emit_push("$s1", s);
   e1->code(s, curr_node, curr_classtable, label_index);
-  emit_fetch_int(T1, ACC, s);
+  emit_fetch_int("$s1", ACC, s);
   e2->code(s, curr_node, curr_classtable, label_index);
   emit_fetch_int(ACC, ACC, s);
-  emit_add("$s1", T1, ACC, s);
+  emit_add("$s1", "$s1", ACC, s);
   emit_partial_load_address(ACC, s); emit_protobj_ref(Int, s); s << endl;
   emit_jal("Object.copy", s);
   emit_store_int("$s1", ACC, s);
+  emit_load("$s1", 1, SP, s);
+  emit_addiu(SP, SP, 4, s);
 }
 
 void sub_class::code(ostream &s, CgenNodeP curr_node, CgenClassTableP curr_classtable, int &label_index) {
+  emit_push("$s1", s);
   e1->code(s, curr_node, curr_classtable, label_index);
-  emit_fetch_int(T1, ACC, s);
+  emit_fetch_int("$s1", ACC, s);
   e2->code(s, curr_node, curr_classtable, label_index);
   emit_fetch_int(ACC, ACC, s);
-  emit_sub("$s1", T1, ACC, s);
+  emit_sub("$s1", "$s1", ACC, s);
   emit_partial_load_address(ACC, s); emit_protobj_ref(Int, s); s << endl;
   emit_jal("Object.copy", s);
   emit_store_int("$s1", ACC, s);
+  emit_load("$s1", 1, SP, s);
+  emit_addiu(SP, SP, 4, s);
 }
 
 void mul_class::code(ostream &s, CgenNodeP curr_node, CgenClassTableP curr_classtable, int &label_index) {
+  emit_push("$s1", s);
   e1->code(s, curr_node, curr_classtable, label_index);
-  emit_fetch_int(T1, ACC, s);
+  emit_fetch_int("$s1", ACC, s);
   e2->code(s, curr_node, curr_classtable, label_index);
   emit_fetch_int(ACC, ACC, s);
-  emit_mul("$s1", T1, ACC, s);
+  emit_mul("$s1", "$s1", ACC, s);
   emit_partial_load_address(ACC, s); emit_protobj_ref(Int, s); s << endl;
   emit_jal("Object.copy", s);
   emit_store_int("$s1", ACC, s);
+  emit_load("$s1", 1, SP, s);
+  emit_addiu(SP, SP, 4, s);
 }
 
 void divide_class::code(ostream &s, CgenNodeP curr_node, CgenClassTableP curr_classtable, int &label_index) {
+  emit_push("$s1", s);
   e1->code(s, curr_node, curr_classtable, label_index);
-  emit_fetch_int(T1, ACC, s);
+  emit_fetch_int("$s1", ACC, s);
   e2->code(s, curr_node, curr_classtable, label_index);
   emit_fetch_int(ACC, ACC, s);
-  emit_div("$s1", T1, ACC, s);
+  emit_div("$s1", "$s1", ACC, s);
   emit_partial_load_address(ACC, s); emit_protobj_ref(Int, s); s << endl;
   emit_jal("Object.copy", s);
   emit_store_int("$s1", ACC, s);
+  emit_load("$s1", 1, SP, s);
+  emit_addiu(SP, SP, 4, s);
 }
 
 void neg_class::code(ostream &s, CgenNodeP curr_node, CgenClassTableP curr_classtable, int &label_index) {
@@ -1393,41 +1409,51 @@ void neg_class::code(ostream &s, CgenNodeP curr_node, CgenClassTableP curr_class
 }
 
 void lt_class::code(ostream &s, CgenNodeP curr_node, CgenClassTableP curr_classtable, int &label_index) {
+  emit_push("$s1", s);
   e1->code(s, curr_node, curr_classtable, label_index);
-  emit_fetch_int(T1, ACC, s);
+  emit_fetch_int("$s1", ACC, s);
   e2->code(s, curr_node, curr_classtable, label_index);
   emit_fetch_int(ACC, ACC, s);
-  emit_blt(T1, ACC, ++label_index, s);
+  emit_blt("$s1", ACC, ++label_index, s);
   emit_load_bool(ACC, BoolConst(0), s);
   emit_branch(label_index+1, s);
   emit_label_def(label_index, s);
   emit_load_bool(ACC, BoolConst(1), s);
   emit_branch(++label_index, s);
   emit_label_def(label_index, s);
+  emit_load("$s1", 1, SP, s);
+  emit_addiu(SP, SP, 4, s);
 }
 
 void eq_class::code(ostream &s, CgenNodeP curr_node, CgenClassTableP curr_classtable, int &label_index) {
+  emit_push("$s1", s);
   e1->code(s, curr_node, curr_classtable, label_index);
-  emit_move(T1, ACC, s);
+  emit_move("$s1", ACC, s);
   e2->code(s, curr_node, curr_classtable, label_index);
   emit_move(T2, ACC, s);
+  emit_move(T1, "$s1", s);
   emit_load_bool(ACC, BoolConst(1), s);
   emit_load_bool(A1, BoolConst(0), s);
   emit_jal("equality_test", s);
+  emit_load("$s1", 1, SP, s);
+  emit_addiu(SP, SP, 4, s);
 }
 
 void leq_class::code(ostream &s, CgenNodeP curr_node, CgenClassTableP curr_classtable, int &label_index) {
+  emit_push("$s1", s);
   e1->code(s, curr_node, curr_classtable, label_index);
-  emit_fetch_int(T1, ACC, s);
+  emit_fetch_int("$s1", ACC, s);
   e2->code(s, curr_node, curr_classtable, label_index);
   emit_fetch_int(ACC, ACC, s);
-  emit_bleq(T1, ACC, ++label_index, s);
+  emit_bleq("$s1", ACC, ++label_index, s);
   emit_load_bool(ACC, BoolConst(0), s);
   emit_branch(label_index+1, s);
   emit_label_def(label_index, s);
   emit_load_bool(ACC, BoolConst(1), s);
   emit_branch(++label_index, s);
   emit_label_def(label_index, s);
+  emit_load("$s1", 1, SP, s);
+  emit_addiu(SP, SP, 4, s);
 }
 
 void comp_class::code(ostream &s, CgenNodeP curr_node, CgenClassTableP curr_classtable, int &label_index) {

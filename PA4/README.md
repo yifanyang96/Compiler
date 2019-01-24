@@ -1,5 +1,7 @@
 # Semantic Analysis
 
+PA4.pdf, cool-manual.pdf and cool-tour.pdf are useful!
+
 ## Overall Structure
 
 The following tasks are performed:
@@ -65,6 +67,8 @@ Therefore, we can update the lub in the loop.
 ### SELF_TYPE
 
 `SELF_TYPE` is the trickiest part of the project. Though the formal rules with the notation of ` SELF_TYPE_C` are complicated, the implementation can be written in a concise way. Since we are performing type-checking in the unit of classes, whenever `SELF_TYPE` appears (in attributes, return types or method bodies, current or inherited) the ` SELF_TYPE_C` is actually the current class. So we can just lookup `self` in the current attribute declaration table.
+
+### Errors
 
 Errors in this phase are:
 

@@ -60,7 +60,6 @@ public:
    CgenClassTable(Classes, ostream& str);
    void code();
    CgenNodeP root();
-   int find_class_tag(Symbol name);
    void code_method();
    int get_method_offset(Symbol class_name, Symbol method_name);
    List<Case_class> *sort(List<Case_class> *node_list);
@@ -78,7 +77,6 @@ private:
    int class_tag;
    List<Entry> *attr_list;
    List<Entry> *method_list;
-   SymbolTable<Symbol, Feature_class> *attr_symbtab;
    SymbolTable<Symbol, Entry> *method_symbtab;
    List<Entry> *let_list;
    List<Entry> *formal_list;
@@ -94,12 +92,12 @@ public:
    CgenNodeP get_parentnd() { return parentnd; }
    int basic() { return (basic_status == Basic); }
    void build_feature_tab();
-   List<Entry> *add_attr(List<Entry> *feature_list, SymbolTable<Symbol, Feature_class> *feature_symbtab, int flag);
+   List<Entry> *add_attr(List<Entry> *feature_list, int flag);
    List<Entry> *add_method(List<Entry> *feature_list, SymbolTable<Symbol, Entry> *feature_symbtab, int flag);
-   List<Entry> *add_attr_acc(List<Entry> *feature_list, SymbolTable<Symbol, Feature_class> *feature_symbtab, Feature curr_feature);
+   List<Entry> *add_attr_acc(List<Entry> *feature_list, Feature curr_feature);
    List<Entry> *add_method_acc(List<Entry> *feature_list, SymbolTable<Symbol, Entry> *feature_symbtab, Feature curr_feature);
    List<Entry> *list_enqueue(List<Entry> *orig_list, Symbol s);
-   List<Entry> *build_attr_tab_acc(List<Entry> *feature_list, SymbolTable<Symbol, Feature_class> *feature_symbtab, int flag);
+   List<Entry> *build_attr_tab_acc(List<Entry> *feature_list, int flag);
    List<Entry> *build_method_tab_acc(List<Entry> *feature_list, SymbolTable<Symbol, Entry> *feature_symbtab, int flag);
    int get_class_tag() { return class_tag; }
    void set_class_tag(int t) { class_tag = t; }
@@ -116,7 +114,7 @@ public:
    void remove_let_id();
    int get_let_offset(Symbol name);
    void add_formal_id(Symbol name);
-   void remove_formal_id();
+   void empty_formal_id();
    int get_formal_offset(Symbol name);
    void code_method(ostream &s, CgenClassTableP curr_classtable, int &label_index);
    int get_method_offset(Symbol method_name);

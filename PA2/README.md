@@ -1,5 +1,7 @@
 # Lexical Analysis
 
+PA2.pdf and [The Flex Manual](http://westes.github.io/flex/manual/) are useful!
+
 ## Tokens
 
 You can find all the tokens in file `utilities.cc`. They are needed for RE definitions (of course for later assignments too).
@@ -10,7 +12,7 @@ How to define REs for the symbols in flex is specified in the handout:
 
 ![RE](Screenshots/RE.png)
 
-Besides that, you may need to know some tricks in RE (e.g. using `?i` for case insensitiveness of keywords)
+Besides that, you may need to know some tricks in RE (e.g. using `?i` for case insensitiveness of keywords).
 
 ## Rules
 
@@ -32,7 +34,7 @@ To summarize, the key points are the following:
 
 ## The Start Condition Feature of Flex
 
-In order to implement nested comments and strings you must read the 'Start Conditions' section of the flex manual: [Start Conditions - Flex Manual](http://westes.github.io/flex/manual/Start-Conditions.html#Start-Conditions). The key points are:
+In order to implement nested comments and strings it is essential to read the 'Start Conditions' section of the flex manual: [Start Conditions - Flex Manual](http://westes.github.io/flex/manual/Start-Conditions.html#Start-Conditions). The key points are:
 
 1. Define a symbol to indicate the openning state of an expression. The syntax is `%s` or `%x` followed by a name (e.g. `%x COMMENT`).
 
@@ -47,3 +49,7 @@ In order to implement nested comments and strings you must read the 'Start Condi
 6. Remember to increment `curr_lineno` when a newline is encountered.
 
 7. String rules are a little bit complicated. Fortunately, the flex manual provides some of them as example: [Start Conditions - Flex Manual](http://westes.github.io/flex/manual/Start-Conditions.html#Start-Conditions). You should store the content of a string in `string_buf_ptr`.
+
+## Problems
+
+I do not know how to write string length test as a single rule so I put it in every rule, which is really a kind of ugly code style.

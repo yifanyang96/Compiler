@@ -80,24 +80,51 @@ static void initialize_constants(void)
     type_name   = idtable.add_string("type_name");
     val         = idtable.add_string("_val");
 }
+//////////////////////////////////////////////////////////////////////
+//
+// Constructor helper functions
+//
+//////////////////////////////////////////////////////////////////////
 
-//Codes added
+//
+// The get methods of the constructors
+//
 Symbol class__class::get_name() { return name; }
 Symbol class__class::get_parent() { return parent; }
 Features class__class::get_features() { return features; }
 Symbol attr_class::get_name() { return name; }
 Symbol attr_class::get_type() { return type_decl; }
 Formals attr_class::get_formals() { return NULL; }
+Symbol method_class::get_name() { return name; }
+Symbol method_class::get_type() { return return_type; }
+Formals method_class::get_formals() { return formals; }
+Symbol formal_class::get_name() { return name; }
+Symbol formal_class::get_type() { return type_decl; }
+Symbol branch_class::get_name() { return name; }
+Symbol branch_class::get_type() { return type_decl; }
+Expression branch_class::get_expr() { return expr; }
+//
+// Check whether the current attribute is redefined
+//
 bool attr_class::attr_redefine_error(SymbolTable<Symbol, Entry> *curr_attr_declarations) {
     return (curr_attr_declarations->lookup(name) != NULL);
 }
 int attr_class::method_redefine_error(SymbolTable<Symbol, Feature_class> *curr_method_declarations, Symbol filename, ClassTable *curr_classtable) { return 0; }
+//
+// Add current attribute to the class's attribute declaration table
+//
 void attr_class::add_attr(SymbolTable<Symbol, Entry> *curr_attr_declarations) {
     curr_attr_declarations->addid(name, type_decl);
 }
 void attr_class::add_method(SymbolTable<Symbol, Feature_class> *curr_method_declarations) {}
+//
+// Check whether self appears in the attribute binding
+//
 bool attr_class::self_error() { return name == self; }
 bool method_class::self_error() { return false; }
+//
+// Check whether the current method is redefined properly and self and SELF_TYPE do not appear in the formal bindings
+//
 int method_class::method_redefine_error(SymbolTable<Symbol, Feature_class> *curr_method_declarations, Symbol filename, ClassTable *curr_classtable) {
     if (curr_method_declarations->probe(name) != NULL)
         return 1;
@@ -133,18 +160,19 @@ int method_class::method_redefine_error(SymbolTable<Symbol, Feature_class> *curr
     return 0;
 }
 bool method_class::attr_redefine_error(SymbolTable<Symbol, Entry> *curr_attr_declarations) { return false; }
+//
+// Add current method to the class's method declaration table
+//
 void method_class::add_method(SymbolTable<Symbol, Feature_class> *curr_method_declarations) {
     curr_method_declarations->addid(name, this);
 }
 void method_class::add_attr(SymbolTable<Symbol, Entry> *curr_attr_declarations) {}
-Symbol method_class::get_name() { return name; }
-Symbol method_class::get_type() { return return_type; }
-Formals method_class::get_formals() { return formals; }
-Symbol formal_class::get_name() { return name; }
-Symbol formal_class::get_type() { return type_decl; }
-Symbol branch_class::get_name() { return name; }
-Symbol branch_class::get_type() { return type_decl; }
-Expression branch_class::get_expr() { return expr; }
+
+//////////////////////////////////////////////////////////////////////
+//
+// ClassTable helper functions
+//
+//////////////////////////////////////////////////////////////////////
 
 void ClassTable::halt() {
     if (errors()) {
@@ -152,7 +180,11 @@ void ClassTable::halt() {
 	    exit(1);
     }
 }
+
 SymbolTable<Symbol, Class__class> *ClassTable::get_all_classes() { return classes_scope; }
+//
+// Check whether name1 is a subclass of name2 by recursively trace back through name1's ancestors
+//
 bool ClassTable::is_subclass(Symbol name1, Symbol name2) {
     Class_ curr_class = classes_scope->lookup(name1);
     if (curr_class == NULL)
@@ -169,7 +201,9 @@ bool ClassTable::no_type_error(Symbol filename, Symbol curr_type, tree_node *t) 
     }
     return false;
 }
-
+//
+// Find the least upper bound of class T1 and T2 by recursively trace back through T1 (or T2)'s ancestors
+//
 Symbol ClassTable::lub(Symbol T1, Symbol T2) {
     if (is_subclass(T1, T2))
         return T2;
@@ -189,55 +223,9 @@ bool ClassTable::no_method_error(Symbol class_name, Symbol method_name, Symbol f
 Feature ClassTable::get_method_entity(Symbol class_name, Symbol method_name) {
     return method_declarations->lookup(class_name)->lookup(method_name);
 }
-
-ClassTable::ClassTable(Classes classes) : semant_errors(0) , error_stream(cerr) {
-
-    /* Fill this in */
-    install_basic_classes();
-    all_classes = append_Classes(all_classes, classes);
-    class_num = all_classes->len();
-    class_names = new SymbolTable<Symbol, int>();
-    class_names->enterscope();
-    inheritance = new SymbolTable<int, int>();
-    inheritance->enterscope();
-    build_inheritance_graph();
-    if (isCyclic())
-        semant_error() << "The inheritance graph is not acyclic.\n";
-}
-
-void ClassTable::build_inheritance_graph() {
-    classes_scope = new SymbolTable<Symbol, Class__class>();
-    classes_scope->enterscope();
-    Class_ class_entity;
-    Symbol class_name;
-    int j = 0;
-    class_names->addid(No_class, new int(j++));
-    for (int i = all_classes->first(); all_classes->more(i); i = all_classes->next(i)) {
-        class_entity = all_classes->nth(i);
-        class_name = class_entity->get_name();
-        if (classes_scope->lookup(class_name) != NULL)
-            semant_error(class_entity) << "Class " << class_name << " is defined multiple times.\n";
-        else {
-            classes_scope->addid(class_name, class_entity);
-            class_names->addid(class_name, new int(j++));
-        }
-    }
-    if (classes_scope->lookup(Main) == NULL)
-        semant_error(class_entity) << "Class " << Main << " is not defined.\n"; 
-    j = 1;
-    int *parent_id;
-    for (int i = all_classes->first(); all_classes->more(i); i = all_classes->next(i)) {
-        parent_id = class_names->lookup(all_classes->nth(i)->get_parent());
-        if (parent_id == NULL) {
-            Class_ curr_class = all_classes->nth(i);
-            semant_error(curr_class) << "Class " << curr_class->get_name() << "\'s parent class " << curr_class->get_parent() << " is not defined.\n";
-        }
-        else {
-            inheritance->addid(j++, parent_id);
-        }
-    }
-}
-
+//
+// Check whether the inheritance graph is cyclic using DFS
+//
 bool ClassTable::isCyclicUtil(int v, bool visited[], bool *recStack) {
     int *parent_id;
     if(visited[v] == false) {
@@ -266,6 +254,62 @@ bool ClassTable::isCyclic() {
         if (isCyclicUtil(i, visited, recStack))
             return true;
     return false;
+}
+//
+// Check all classes and their parents are defined only once and build the inheritace graph (using index to identify classes)
+//
+void ClassTable::build_inheritance_graph() {
+    classes_scope = new SymbolTable<Symbol, Class__class>();
+    classes_scope->enterscope();
+    Class_ class_entity;
+    Symbol class_name;
+    int j = 0;
+    class_names->addid(No_class, new int(j++));
+    for (int i = all_classes->first(); all_classes->more(i); i = all_classes->next(i)) {
+        class_entity = all_classes->nth(i);
+        class_name = class_entity->get_name();
+        if (classes_scope->lookup(class_name) != NULL)
+            semant_error(class_entity) << "Class " << class_name << " is defined multiple times.\n";
+        else {
+            Symbol parent_name = class_entity->get_parent();
+            if (parent_name == Int || parent_name == Str || parent_name == Bool)
+                semant_error(class_entity->get_filename(), class_entity) << "Basic classes: Int, String, Bool cannot be inherited.\n";
+            else {
+                // Record all the class names and entities in a table
+                classes_scope->addid(class_name, class_entity);
+                // Bind indices to class names
+                class_names->addid(class_name, new int(j++));
+            }
+        }
+    }
+    if (classes_scope->lookup(Main) == NULL)
+        semant_error(class_entity) << "Class " << Main << " is not defined.\n"; 
+    j = 1;
+    int *parent_id;
+    for (int i = all_classes->first(); all_classes->more(i); i = all_classes->next(i)) {
+        parent_id = class_names->lookup(all_classes->nth(i)->get_parent());
+        if (parent_id == NULL) {
+            Class_ curr_class = all_classes->nth(i);
+            semant_error(curr_class) << "Class " << curr_class->get_name() << "\'s parent class " << curr_class->get_parent() << " is not defined.\n";
+        }
+        else {
+            // Bind parent's index to its own index
+            inheritance->addid(j++, parent_id);
+        }
+    }
+}
+
+ClassTable::ClassTable(Classes classes) : semant_errors(0) , error_stream(cerr) {
+    install_basic_classes();
+    all_classes = append_Classes(all_classes, classes);
+    class_num = all_classes->len();
+    class_names = new SymbolTable<Symbol, int>();
+    class_names->enterscope();
+    inheritance = new SymbolTable<int, int>();
+    inheritance->enterscope();
+    build_inheritance_graph();
+    if (isCyclic())
+        semant_error() << "The inheritance graph is not acyclic.\n";
 }
 
 void ClassTable::install_basic_classes() {
@@ -379,71 +423,13 @@ void ClassTable::install_basic_classes() {
                                       single_Classes(Str_class)))));
 }
 
-// Codes added
-void ClassTable::naming_scoping() {
-    attr_declarations = new SymbolTable<Symbol, SymbolTable<Symbol, Entry> >();
-    attr_declarations->enterscope();
-    method_declarations = new SymbolTable<Symbol, SymbolTable<Symbol, Feature_class> >();
-    method_declarations->enterscope();
-    for (int j = all_classes->first(); all_classes->more(j); j = all_classes->next(j))
-        naming_scoping(all_classes->nth(j));
-}
-
-void ClassTable::naming_scoping_helper(Class_ curr_class, SymbolTable<Symbol, Entry> *curr_attr_declarations, SymbolTable<Symbol, Feature_class> *curr_method_declarations, bool error_flag) {
-    Features features = curr_class->get_features();
-    Feature curr_feature;
-    Symbol curr_type;
-    for(int i = features->first(); features->more(i); i = features->next(i)) {
-        curr_feature = features->nth(i);
-        if (curr_feature->self_error())
-            semant_error(curr_class->get_filename(), curr_feature) << "self is not allowed to appear in an attribute.\n";
-        curr_type = curr_feature->get_type();
-        if (!no_type_error(curr_class->get_filename(), curr_type, curr_feature)) {
-            naming_scoping(curr_feature, curr_class->get_filename(), curr_attr_declarations, curr_method_declarations, error_flag);
-        }
-    }
-}
-
-void ClassTable::naming_scoping_acc(Class_ curr_class, SymbolTable<Symbol, Entry> *curr_attr_declarations, SymbolTable<Symbol, Feature_class> *curr_method_declarations) {
-    Class_ parent_class;
-    Symbol name = curr_class->get_name();
-    if (name != Object) {
-        parent_class = classes_scope->lookup(curr_class->get_parent());
-        naming_scoping_acc(parent_class, curr_attr_declarations, curr_method_declarations);
-    }
-    else {
-        curr_attr_declarations->enterscope();
-        curr_method_declarations->enterscope();
-    }
-    naming_scoping_helper(curr_class, curr_attr_declarations, curr_method_declarations, false);
-}
-
-void ClassTable::naming_scoping(Class_ curr_class) {
-    Symbol name = curr_class->get_name();
-    SymbolTable<Symbol, Entry> *curr_attr_declarations = new SymbolTable<Symbol, Entry>();
-    SymbolTable<Symbol, Feature_class> *curr_method_declarations = new SymbolTable<Symbol, Feature_class>();
-    Class_ parent_class;
-    Symbol parent_name;
-    if (name != Object) {
-        parent_class = classes_scope->lookup(curr_class->get_parent());
-        parent_name = parent_class->get_name();
-        if (parent_name == Int || parent_name == Str || parent_name == Bool)
-            semant_error(curr_class->get_filename(), curr_class) << "Basic classes: Int, String, Bool cannot be inherited.\n";
-        naming_scoping_acc(parent_class, curr_attr_declarations, curr_method_declarations);
-    }
-    curr_attr_declarations->enterscope();
-    curr_method_declarations->enterscope();
-    naming_scoping_helper(curr_class, curr_attr_declarations, curr_method_declarations, true);
-    curr_attr_declarations->addid(self, name);
-    if (name == Main) {
-        if (curr_method_declarations->probe(main_meth) == NULL)
-            semant_error(curr_class->get_filename(), curr_class) << "Method main is not defined.\n";
-        else if (curr_method_declarations->probe(main_meth)->get_formals()->len() != 0)
-            semant_error(curr_class->get_filename(), curr_class) << "Method main should take no formal parameters.\n";
-    }
-    attr_declarations->addid(name, curr_attr_declarations);
-    method_declarations->addid(name, curr_method_declarations);
-}
+//////////////////////////////////////////////////////////////////////
+//
+// Naming-scoping part. Check basic definition errors and add all the
+// attributes and methods (including ones inherited) to every class's
+// declaration table.
+//
+//////////////////////////////////////////////////////////////////////
 
 void ClassTable::naming_scoping(Feature curr_feature, Symbol filename, SymbolTable<Symbol, Entry> *curr_attr_declarations, SymbolTable<Symbol, Feature_class> *curr_method_declarations, bool error_flag) {
     Symbol name = curr_feature->get_name();
@@ -484,6 +470,79 @@ void ClassTable::naming_scoping(Feature curr_feature, Symbol filename, SymbolTab
         curr_feature->add_method(curr_method_declarations);
 }
 
+void ClassTable::naming_scoping_helper(Class_ curr_class, SymbolTable<Symbol, Entry> *curr_attr_declarations, SymbolTable<Symbol, Feature_class> *curr_method_declarations, bool error_flag) {
+    Features features = curr_class->get_features();
+    Feature curr_feature;
+    Symbol curr_type;
+    for(int i = features->first(); features->more(i); i = features->next(i)) {
+        curr_feature = features->nth(i);
+        if (curr_feature->self_error())
+            semant_error(curr_class->get_filename(), curr_feature) << "self is not allowed to appear in an attribute binding.\n";
+        curr_type = curr_feature->get_type();
+        if (!no_type_error(curr_class->get_filename(), curr_type, curr_feature)) {
+            naming_scoping(curr_feature, curr_class->get_filename(), curr_attr_declarations, curr_method_declarations, error_flag);
+        }
+    }
+}
+
+void ClassTable::naming_scoping_acc(Class_ curr_class, SymbolTable<Symbol, Entry> *curr_attr_declarations, SymbolTable<Symbol, Feature_class> *curr_method_declarations) {
+    Class_ parent_class;
+    Symbol name = curr_class->get_name();
+    // Add features recursively
+    if (name != Object) {
+        parent_class = classes_scope->lookup(curr_class->get_parent());
+        naming_scoping_acc(parent_class, curr_attr_declarations, curr_method_declarations);
+    }
+    else {
+        curr_attr_declarations->enterscope();
+        curr_method_declarations->enterscope();
+    }
+    naming_scoping_helper(curr_class, curr_attr_declarations, curr_method_declarations, false);
+}
+
+void ClassTable::naming_scoping(Class_ curr_class) {
+    Symbol name = curr_class->get_name();
+    SymbolTable<Symbol, Entry> *curr_attr_declarations = new SymbolTable<Symbol, Entry>();
+    SymbolTable<Symbol, Feature_class> *curr_method_declarations = new SymbolTable<Symbol, Feature_class>();
+    Class_ parent_class;
+    Symbol parent_name;
+    // Add ancestors' features
+    if (name != Object) {
+        parent_class = classes_scope->lookup(curr_class->get_parent());
+        naming_scoping_acc(parent_class, curr_attr_declarations, curr_method_declarations);
+    }
+    // Add current features (in a new scope)
+    curr_attr_declarations->enterscope();
+    curr_method_declarations->enterscope();
+    naming_scoping_helper(curr_class, curr_attr_declarations, curr_method_declarations, true);
+    curr_attr_declarations->addid(self, name);
+    if (name == Main) {
+        if (curr_method_declarations->probe(main_meth) == NULL)
+            semant_error(curr_class->get_filename(), curr_class) << "Method main is not defined.\n";
+        else if (curr_method_declarations->probe(main_meth)->get_formals()->len() != 0)
+            semant_error(curr_class->get_filename(), curr_class) << "Method main should take no formal parameters.\n";
+    }
+    // Record the class name and tables in the global lookup table
+    attr_declarations->addid(name, curr_attr_declarations);
+    method_declarations->addid(name, curr_method_declarations);
+}
+
+void ClassTable::naming_scoping() {
+    // Global lookup table for classes' declaration tables
+    attr_declarations = new SymbolTable<Symbol, SymbolTable<Symbol, Entry> >();
+    attr_declarations->enterscope();
+    method_declarations = new SymbolTable<Symbol, SymbolTable<Symbol, Feature_class> >();
+    method_declarations->enterscope();
+    for (int j = all_classes->first(); all_classes->more(j); j = all_classes->next(j))
+        naming_scoping(all_classes->nth(j));
+}
+
+//////////////////////////////////////////////////////////////////////
+//
+// Type-checking part.
+//
+//////////////////////////////////////////////////////////////////////
+
 void ClassTable::type_checking() {
     Symbol name;
     Class_ curr_class;
@@ -495,6 +554,7 @@ void ClassTable::type_checking() {
 }
 
 void class__class::type_checking(SymbolTable<Symbol, Entry> *attr_declarations, SymbolTable<Symbol, Feature_class> *method_declarations, ClassTable *curr_classtable) {
+    // Feature ordering is not important. (i.e. not necessary to begin with ancestors' features)
     for(int i = features->first(); features->more(i); i = features->next(i)) {
         features->nth(i)->type_checking(attr_declarations, method_declarations, curr_classtable, this);
     }
@@ -507,7 +567,8 @@ void class__class::type_checking(SymbolTable<Symbol, Entry> *attr_declarations, 
         curr_features = curr_class->get_features();
         for(int i = curr_features->first(); curr_features->more(i); i = curr_features->next(i)) {
             curr_feature = curr_features->nth(i);
-            if (attr_declarations->probe(curr_feature->get_name()) == NULL && method_declarations->probe(curr_feature->get_name()) == NULL)
+            // Ignore redefined methods (notice that attrs are never redefined).
+            if (method_declarations->probe(curr_feature->get_name()) == NULL)
                 curr_feature->type_checking(attr_declarations, method_declarations, curr_classtable, this);
         }
         parent_name = curr_class->get_parent();
@@ -519,6 +580,7 @@ void attr_class::type_checking(SymbolTable<Symbol, Entry> *attr_declarations, Sy
     Symbol init_type = init->get_type();
     if (init_type != No_type){
         Symbol real_type = type_decl;
+        // The concept of SELF_TYPE_C
         if (type_decl == SELF_TYPE)
             real_type = attr_declarations->lookup(self);
         if (init_type == SELF_TYPE)
@@ -527,6 +589,7 @@ void attr_class::type_checking(SymbolTable<Symbol, Entry> *attr_declarations, Sy
             curr_classtable->semant_error(curr_class->get_filename(), this) << "Identifier " << name << " declared type " << real_type << " but assigned type " << init_type << " .\n";
     }
     else
+        // Set no_expr to the type declared (in convenience of later code generation).
         init = init->set_type(type_decl);
 }
 
@@ -540,15 +603,13 @@ void method_class::type_checking(SymbolTable<Symbol, Entry> *attr_declarations, 
     expr = expr->type_checking(attr_declarations, method_declarations, curr_classtable, curr_class);
     Symbol expr_type = expr->get_type();
     Symbol real_type = return_type;
-    if (expr_type != No_type){
-        if (return_type == SELF_TYPE)
-            real_type = attr_declarations->lookup(self);
-        if (expr_type == SELF_TYPE)
-            expr_type = attr_declarations->lookup(self);
-        if (!curr_classtable->is_subclass(expr_type, real_type))
-            curr_classtable->semant_error(curr_class->get_filename(), this) << "The declared return type of method " << name << " is " << real_type << " but the type of the method body is " << expr_type << " .\n";
-        attr_declarations->exitscope();
-    }
+    if (return_type == SELF_TYPE)
+        real_type = attr_declarations->lookup(self);
+    if (expr_type == SELF_TYPE)
+        expr_type = attr_declarations->lookup(self);
+    if (!curr_classtable->is_subclass(expr_type, real_type))
+        curr_classtable->semant_error(curr_class->get_filename(), this) << "The declared return type of method " << name << " is " << real_type << " but the type of the method body is " << expr_type << " .\n";
+    attr_declarations->exitscope();
 }
 
 Expression assign_class::type_checking(SymbolTable<Symbol, Entry> *attr_declarations, SymbolTable<Symbol, Feature_class> *method_declarations, ClassTable *curr_classtable, Class_ curr_class) {
@@ -578,7 +639,8 @@ Expression static_dispatch_class::type_checking(SymbolTable<Symbol, Entry> *attr
     Feature method_entity = curr_classtable->get_method_entity(type_name, name);
     Expression expr_with_type;
     Expressions new_actual;
-    for (int i = actual->first(); actual->more(i); i = actual->next(i)) {
+    int i;
+    for (i = actual->first(); actual->more(i); i = actual->next(i)) {
         if (!method_entity->get_formals()->more(i)) {
             curr_classtable->semant_error(curr_class->get_filename(), this) << "Number of parameters is not the same of declared.\n";
             return set_type(Object);
@@ -592,6 +654,10 @@ Expression static_dispatch_class::type_checking(SymbolTable<Symbol, Entry> *attr
             new_actual = single_Expressions(expr_with_type);
         else
             new_actual = append_Expressions(new_actual, single_Expressions(expr_with_type));
+    }
+    if (method_entity->get_formals()->more(i)) {
+        curr_classtable->semant_error(curr_class->get_filename(), this) << "Number of parameters is not the same of declared.\n";
+        return set_type(Object);
     }
     actual = new_actual;
     Symbol return_type = method_entity->get_type();
@@ -684,15 +750,17 @@ Expression typcase_class::type_checking(SymbolTable<Symbol, Entry> *attr_declara
         if (curr_classtable->no_type_error(curr_class->get_filename(), curr_type, curr_case))
             expr_with_type = curr_case->get_expr()->set_type(Object);
         else {
+            attr_declarations->enterscope();
             attr_declarations->addid(curr_case->get_name(), curr_type);
             expr_with_type = curr_case->get_expr()->type_checking(attr_declarations, method_declarations, curr_classtable, curr_class);
+            attr_declarations->exitscope();
         }
         if (i == cases->first()) {
             final_type = expr_with_type->get_type();
             new_cases = single_Cases(branch(curr_case->get_name(), curr_type, expr_with_type));
         }
         else {
-            final_type = curr_classtable->lub(final_type, expr_with_type->get_type());
+            final_type = curr_classtable->lub(final_type, expr_with_type->get_type()); // Update final type (see README)
             new_cases = append_Cases(new_cases, single_Cases(branch(curr_case->get_name(), curr_type, expr_with_type)));
         }
     }
@@ -866,7 +934,7 @@ Expression new__class::type_checking(SymbolTable<Symbol, Entry> *attr_declaratio
     if (curr_classtable->no_type_error(curr_class->get_filename(), type_name, this)) 
         return set_type(Object);
     else 
-        return set_type(type_name);
+        return set_type(type_name); // It's wrong to set with self's type when encountering SELF_TYPE
 }
 
 Expression isvoid_class::type_checking(SymbolTable<Symbol, Entry> *attr_declarations, SymbolTable<Symbol, Feature_class> *method_declarations, ClassTable *curr_classtable, Class_ curr_class) {
@@ -899,8 +967,10 @@ Expression let_class::type_checking(SymbolTable<Symbol, Entry> *attr_declaration
     }
     else
         init = init->set_type(type_decl);
+    attr_declarations->enterscope();
     attr_declarations->addid(identifier, type_decl);
     body = body->type_checking(attr_declarations, method_declarations, curr_classtable, curr_class);
+    attr_declarations->exitscope();
     return set_type(body->get_type());
 }
 

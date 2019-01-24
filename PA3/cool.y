@@ -142,10 +142,11 @@
     %type <expressions> exps_comma
     %type <expressions> exps_smcln
     %type <expression> lets
+    %type <expression> more_lets
     %type <features> feature_list
 
     /* Precedence declarations go here. */
-    %left '(' ')'
+    %right IN
     %right ASSIGN
     %left NOT
     %nonassoc LE '<' '='
@@ -155,7 +156,6 @@
     %left '~'
     %left '@'
     %left '.'
-    %right IN
 
     %%
     /*
@@ -299,24 +299,26 @@
     { $$ = let($2, $4, no_expr(), $6); }
     | LET OBJECTID ':' TYPEID ASSIGN exp IN exp
     { $$ = let($2, $4, $6, $8); }
-    | LET OBJECTID ':' TYPEID lets
+    | LET OBJECTID ':' TYPEID more_lets
     { $$ = let($2, $4, no_expr(), $5); }
-    | LET OBJECTID ':' TYPEID ASSIGN exp lets
+    | LET OBJECTID ':' TYPEID ASSIGN exp more_lets
     { $$ = let($2, $4, $6, $7);}
-    | ',' OBJECTID ':' TYPEID IN exp
+    | LET error IN exp {}
+    | LET error more_lets
+    { $$ = $3; }
+    ;
+
+    more_lets : ',' OBJECTID ':' TYPEID IN exp
     { $$ = let($2, $4, no_expr(), $6); }
     | ',' OBJECTID ':' TYPEID ASSIGN exp IN exp
     { $$ = let($2, $4, $6, $8); }
-    | ',' OBJECTID ':' TYPEID lets
+    | ',' OBJECTID ':' TYPEID more_lets
     { $$ = let($2, $4, no_expr(), $5); }
-    | ',' OBJECTID ':' TYPEID ASSIGN exp lets
+    | ',' OBJECTID ':' TYPEID ASSIGN exp more_lets
     { $$ = let($2, $4, $6, $7); }
-    | LET error IN exp {}
-    | LET error lets
-    { $$ = $3; }
-    | ',' error lets
-    { $$ = $3; }
     | ',' error IN exp {}
+    | ',' error more_lets
+    { $$ = $3; }
     ;
 
     /* end of grammar */

@@ -6,6 +6,3 @@ Class B inherits A {
   b : Int <- case a of d : Int => d; e : Int => e; esac;
   c : Int;
 };
-Class Main {
-  main(m : Int) : Int { m <- 1 };
-};
