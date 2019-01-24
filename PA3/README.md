@@ -4,7 +4,7 @@ PA3.pdf, cool-tour.pdf, cool-manual.pdf and [The Bison Manual](https://www.gnu.o
 
 ## Cool Syntax
 
-![Cool_syntax](/Screenshots/Cool_syntax.png)
+![Cool_syntax](Screenshots/Cool_syntax.png)
 
 ## Phylum & Constructor
 
